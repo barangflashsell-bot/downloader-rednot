@@ -20,12 +20,13 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
+  'application/octet-stream',
 ]);
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_REDIRECTS = 5;
 const DEFAULT_MAX_RETRIES = 2;
-const DEFAULT_MAX_FILE_SIZE_MB = 50;
+const DEFAULT_MAX_FILE_SIZE_MB = 500;
 const DEFAULT_TELEGRAM_MAX_FILE_SIZE_MB = 50;
 
 const USER_AGENT =
@@ -189,6 +190,21 @@ export async function downloadAndStoreMedia(
         normalizedContentType = meta.expectedMimeType.toLowerCase();
       }
 
+      if (normalizedContentType === 'application/octet-stream') {
+        if (meta?.expectedMimeType) {
+          normalizedContentType = meta.expectedMimeType.toLowerCase();
+        } else if (
+          meta?.expectedType === 'video' ||
+          currentUrl.includes('.mp4') ||
+          currentUrl.includes('/pre_post/') ||
+          currentUrl.includes('sns-video')
+        ) {
+          normalizedContentType = 'video/mp4';
+        } else {
+          normalizedContentType = 'image/jpeg';
+        }
+      }
+
       if (!ALLOWED_MIME_TYPES.has(normalizedContentType)) {
         throw new RednoteInvalidContentTypeError(
           `Unsupported media content type received: ${normalizedContentType || 'unknown'}`
@@ -216,6 +232,28 @@ export async function downloadAndStoreMedia(
         mediaUrl: currentUrl,
         mimeType: normalizedContentType,
       });
+
+      // Fast-path for files larger than Telegram direct upload limit (50 MB) when persistent Blob is unconfigured
+      const isBlobConfigured = Boolean(
+        process.env.BLOB_READ_WRITE_TOKEN && process.env.BLOB_READ_WRITE_TOKEN.trim().length > 0
+      );
+      const declaredSize = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+
+      if (declaredSize > telegramMaxBytes && !isBlobConfigured) {
+        console.log(
+          `[DOWNLOADER] File size (${(declaredSize / 1024 / 1024).toFixed(2)} MB) exceeds Telegram direct upload limit (${(telegramMaxBytes / 1024 / 1024).toFixed(2)} MB). Providing direct CDN URL for download.`
+        );
+        return {
+          success: true,
+          storageKey,
+          publicUrl: currentUrl,
+          mimeType: normalizedContentType,
+          mediaType,
+          size: declaredSize,
+          postId: meta?.postId,
+          deliveryMode: 'link',
+        };
+      }
 
       const alreadyExists = await storageAdapter.exists(storageKey).catch(() => false);
       if (alreadyExists) {

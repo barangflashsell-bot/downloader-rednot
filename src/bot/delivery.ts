@@ -109,9 +109,10 @@ export async function deliverProcessedMedia(
     // Large file or fallback after direct delivery failed
     const keyboard = createDownloadKeyboard(item.publicUrl, item.mediaType);
     const sizeStr = item.size > 0 ? ` (${(item.size / 1024 / 1024).toFixed(1)} MB)` : '';
+    const itemTitle = post.title ? `📹 ${post.title}${itemLabel}` : `📹 Media${itemLabel}`;
     const messageText = item.deliveryMode === 'link'
-      ? `📦 Media${itemLabel}${sizeStr} berhasil disimpan. Karena ukuran file, silakan unduh melalui tombol di bawah:`
-      : `📹 Media${itemLabel} berhasil diproses, tetapi tidak dapat dikirim langsung ke Telegram. Silakan unduh melalui tautan di bawah:`;
+      ? `${itemTitle}${sizeStr}\n\nVideo tanpa watermark siap diunduh melalui tombol di bawah:`
+      : `${itemTitle}\n\nVideo berhasil diproses, tetapi tidak dapat dikirim langsung ke Telegram. Silakan unduh melalui tautan di bawah:`;
 
     await ctx.reply(messageText, {
       reply_markup: keyboard,
