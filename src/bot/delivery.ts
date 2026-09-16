@@ -63,6 +63,8 @@ export async function deliverProcessedMedia(
     if (item.deliveryMode === 'telegram') {
       try {
         if (item.mediaType === 'video') {
+          let videoBuffer: Buffer | null = null;
+
           try {
             await ctx.replyWithVideo(item.publicUrl, {
               caption: videoCaption,
@@ -72,11 +74,40 @@ export async function deliverProcessedMedia(
             console.warn(
               `[DELIVERY] Direct URL upload failed (${urlErr instanceof Error ? urlErr.message : String(urlErr)}). Retrying with clean buffer streaming...`
             );
-            const videoBuffer = await fetchMediaBuffer(item.publicUrl);
+            videoBuffer = await fetchMediaBuffer(item.publicUrl);
             await ctx.replyWithVideo(new InputFile(videoBuffer, 'video.mp4'), {
               caption: videoCaption,
               reply_markup: downloadKeyboard,
             });
+          }
+
+          // Kirim juga sebagai Dokumen Asli HD agar pengguna Apple iOS/Android bisa langsung simpan ke Galeri Foto
+          if (typeof ctx.replyWithDocument === 'function') {
+            try {
+              const cleanTitle = (post.title || 'video')
+                .replace(/[/\\?%*:|"<>#]/g, '')
+                .trim()
+                .slice(0, 40);
+              const filename = `${cleanTitle || 'rednote_video'}.mp4`;
+              const docCaption = `📁 <b>File Dokumen Asli HD (Apple/iOS/android)</b>${itemLabel}\n<i>(Tap & tahan pesan ini lalu pilih "Save Video" untuk simpan langsung ke Galeri Foto)</i>`;
+
+              try {
+                await ctx.replyWithDocument(item.publicUrl, {
+                  caption: docCaption,
+                  parse_mode: 'HTML',
+                });
+              } catch {
+                if (!videoBuffer) {
+                  videoBuffer = await fetchMediaBuffer(item.publicUrl);
+                }
+                await ctx.replyWithDocument(new InputFile(videoBuffer, filename), {
+                  caption: docCaption,
+                  parse_mode: 'HTML',
+                });
+              }
+            } catch (docErr) {
+              console.warn('[DELIVERY] Optional document delivery skipped:', docErr);
+            }
           }
         } else {
           try {
