@@ -1,0 +1,50 @@
+{
+  "name": "rednote-telegram-downloader",
+  "version": "1.0.0",
+  "description": "Telegram Bot Downloader for Xiaohongshu / RedNote deployed on Vercel Serverless Functions",
+  "main": "dist/api/telegram.js",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "webhook:set": "tsx scripts/set-webhook.ts",
+    "webhook:info": "tsx scripts/get-webhook-info.ts",
+    "webhook:delete": "tsx scripts/delete-webhook.ts",
+    "check:telegram": "tsx scripts/check-telegram.ts",
+    "check:webhook": "tsx scripts/check-webhook.ts",
+    "test:rednote:live": "tsx scripts/test-live-extraction.ts",
+    "dev": "vercel dev"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "rednote",
+    "xiaohongshu",
+    "downloader",
+    "vercel",
+    "grammy"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@vercel/blob": "^2.8.0",
+    "cheerio": "^1.2.0",
+    "grammy": "^1.35.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
+    "@vercel/node": "^5.1.8",
+    "dotenv": "^17.4.2",
+    "eslint": "^10.10.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.8.2",
+    "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=20.x"
+  }
+}
