@@ -109,12 +109,16 @@ export async function deliverProcessedMedia(
     // Large file or fallback after direct delivery failed
     const keyboard = createDownloadKeyboard(item.publicUrl, item.mediaType);
     const sizeStr = item.size > 0 ? ` (${(item.size / 1024 / 1024).toFixed(1)} MB)` : '';
-    const itemTitle = post.title ? `📹 ${post.title}${itemLabel}` : `📹 Media${itemLabel}`;
-    const messageText = item.deliveryMode === 'link'
-      ? `${itemTitle}${sizeStr}\n\nVideo tanpa watermark siap diunduh melalui tombol di bawah:`
-      : `${itemTitle}\n\nVideo berhasil diproses, tetapi tidak dapat dikirim langsung ke Telegram. Silakan unduh melalui tautan di bawah:`;
+    const itemTitle = post.title ? `📹 <b>${post.title}${itemLabel}</b>` : `📹 <b>Media${itemLabel}</b>`;
+    const messageText = `${itemTitle}${sizeStr}\n\n` +
+      `⚠️ Ukuran video melebihi batas upload Telegram (50 MB), sehingga tidak dapat dikirim langsung ke Telegram.\n\n` +
+      `💡 <b>Cara Simpan ke Galeri:</b>\n` +
+      `1. Klik tombol <b>Download Video</b> di bawah\n` +
+      `2. Di browser, tekan tombol <b>Share / Bagikan</b> (ikon panah)\n` +
+      `3. Pilih <b>Simpan Video (Save Video)</b> agar masuk ke Galeri HP (Kualitas Asli & Tanpa Watermark).`;
 
     await ctx.reply(messageText, {
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
     linkCount++;
