@@ -15,6 +15,24 @@ export function createDownloadKeyboard(url: string, mediaType: 'video' | 'image'
   return new InlineKeyboard().url(label, url);
 }
 
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+async function fetchMediaBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      'Accept': '*/*',
+      'Referer': 'https://www.xiaohongshu.com/',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch media from CDN: HTTP ${res.status}`);
+  }
+  const arrayBuf = await res.arrayBuffer();
+  return Buffer.from(arrayBuf);
+}
+
 /**
  * Delivers processed media to a Telegram user.
  * Tries direct media delivery for files under Telegram's limit.
@@ -37,6 +55,9 @@ export async function deliverProcessedMedia(
     const item = storedMedia[i];
     const isSingle = storedMedia.length === 1;
     const itemLabel = isSingle ? '' : ` (${i + 1}/${storedMedia.length})`;
+    const downloadKeyboard = createDownloadKeyboard(item.publicUrl, item.mediaType);
+    const videoCaption = post.title ? `📹 ${post.title}${itemLabel}` : undefined;
+    const photoCaption = post.title ? `📸 ${post.title}${itemLabel}` : undefined;
 
     // Check if the item is flagged for direct Telegram upload
     if (item.deliveryMode === 'telegram') {
@@ -44,27 +65,33 @@ export async function deliverProcessedMedia(
         if (item.mediaType === 'video') {
           try {
             await ctx.replyWithVideo(item.publicUrl, {
-              caption: post.title ? `📹 ${post.title}${itemLabel}` : undefined,
+              caption: videoCaption,
+              reply_markup: downloadKeyboard,
             });
           } catch (urlErr) {
             console.warn(
-              `[DELIVERY] Direct URL upload failed (${urlErr instanceof Error ? urlErr.message : String(urlErr)}). Retrying with InputFile streaming...`
+              `[DELIVERY] Direct URL upload failed (${urlErr instanceof Error ? urlErr.message : String(urlErr)}). Retrying with clean buffer streaming...`
             );
-            await ctx.replyWithVideo(new InputFile(new URL(item.publicUrl)), {
-              caption: post.title ? `📹 ${post.title}${itemLabel}` : undefined,
+            const videoBuffer = await fetchMediaBuffer(item.publicUrl);
+            await ctx.replyWithVideo(new InputFile(videoBuffer, 'video.mp4'), {
+              caption: videoCaption,
+              reply_markup: downloadKeyboard,
             });
           }
         } else {
           try {
             await ctx.replyWithPhoto(item.publicUrl, {
-              caption: post.title ? `📸 ${post.title}${itemLabel}` : undefined,
+              caption: photoCaption,
+              reply_markup: downloadKeyboard,
             });
           } catch (urlErr) {
             console.warn(
-              `[DELIVERY] Direct URL photo upload failed (${urlErr instanceof Error ? urlErr.message : String(urlErr)}). Retrying with InputFile streaming...`
+              `[DELIVERY] Direct URL photo upload failed (${urlErr instanceof Error ? urlErr.message : String(urlErr)}). Retrying with buffer streaming...`
             );
-            await ctx.replyWithPhoto(new InputFile(new URL(item.publicUrl)), {
-              caption: post.title ? `📸 ${post.title}${itemLabel}` : undefined,
+            const photoBuffer = await fetchMediaBuffer(item.publicUrl);
+            await ctx.replyWithPhoto(new InputFile(photoBuffer, 'image.jpg'), {
+              caption: photoCaption,
+              reply_markup: downloadKeyboard,
             });
           }
         }

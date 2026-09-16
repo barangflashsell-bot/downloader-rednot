@@ -289,9 +289,23 @@ interface RednoteInitialState {
       }
 
       // Check for watermark-free origin video first
-      const originVideoKey =
+      let originVideoKey =
         noteObj.video?.consumer?.originVideoKey ||
         noteObj.video?.consumer?.origin_video_key;
+
+      if (!originVideoKey && noteObj.video?.mediaV2) {
+        try {
+          const parsedV2 = JSON.parse(noteObj.video.mediaV2);
+          originVideoKey =
+            parsedV2?.video?.consumer?.originVideoKey ||
+            parsedV2?.video?.consumer?.origin_video_key ||
+            parsedV2?.consumer?.originVideoKey ||
+            parsedV2?.consumer?.origin_video_key ||
+            parsedV2?.originVideoKey;
+        } catch {
+          // ignore
+        }
+      }
 
       if (originVideoKey && typeof originVideoKey === 'string') {
         const noWatermarkUrl = `https://sns-video-bd.xhscdn.com/${originVideoKey}`;
