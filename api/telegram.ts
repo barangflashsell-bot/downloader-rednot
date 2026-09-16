@@ -18,6 +18,22 @@ function timingSafeCompare(a: string | undefined, b: string | undefined): boolea
 }
 
 /**
+ * Bot initialization promise, cached across warm invocations.
+ * bot.init() calls getMe() once to populate botInfo,
+ * which is required before handleUpdate() can be used.
+ */
+let botInitPromise: Promise<void> | null = null;
+
+async function getInitializedBot() {
+  const bot = getBot();
+  if (!botInitPromise) {
+    botInitPromise = bot.init();
+  }
+  await botInitPromise;
+  return bot;
+}
+
+/**
  * Main Telegram Webhook Handler for Vercel Serverless Functions.
  * Uses bot.handleUpdate() directly for maximum compatibility with Vercel.
  */
@@ -43,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const bot = getBot();
+    const bot = await getInitializedBot();
     const update = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
     console.log(`[Webhook] Processing update_id: ${update?.update_id}`);
