@@ -30,7 +30,15 @@ export async function extractRednote(
   url: string,
   options?: ExtractorOptions
 ): Promise<RednotePost> {
-  const trimmedUrl = url ? url.trim() : '';
+  let trimmedUrl = url ? url.trim() : '';
+
+  // Transparently upgrade http to https for authorized domains
+  if (/^http:\/\//i.test(trimmedUrl)) {
+    const upgraded = trimmedUrl.replace(/^http:\/\//i, 'https://');
+    if (isRednoteUrl(upgraded)) {
+      trimmedUrl = upgraded;
+    }
+  }
 
   // 1. Validate URL
   if (!isRednoteUrl(trimmedUrl)) {

@@ -1,4 +1,4 @@
-import { Context, InlineKeyboard } from 'grammy';
+import { Context, InlineKeyboard, InputFile } from 'grammy';
 import { ProcessedMediaResult } from '../media/media-service';
 
 export interface DeliverySummary {
@@ -42,13 +42,31 @@ export async function deliverProcessedMedia(
     if (item.deliveryMode === 'telegram') {
       try {
         if (item.mediaType === 'video') {
-          await ctx.replyWithVideo(item.publicUrl, {
-            caption: post.title ? `📹 ${post.title}${itemLabel}` : undefined,
-          });
+          try {
+            await ctx.replyWithVideo(item.publicUrl, {
+              caption: post.title ? `📹 ${post.title}${itemLabel}` : undefined,
+            });
+          } catch (urlErr) {
+            console.warn(
+              `[DELIVERY] Direct URL upload failed (${urlErr instanceof Error ? urlErr.message : String(urlErr)}). Retrying with InputFile streaming...`
+            );
+            await ctx.replyWithVideo(new InputFile(new URL(item.publicUrl)), {
+              caption: post.title ? `📹 ${post.title}${itemLabel}` : undefined,
+            });
+          }
         } else {
-          await ctx.replyWithPhoto(item.publicUrl, {
-            caption: post.title ? `📸 ${post.title}${itemLabel}` : undefined,
-          });
+          try {
+            await ctx.replyWithPhoto(item.publicUrl, {
+              caption: post.title ? `📸 ${post.title}${itemLabel}` : undefined,
+            });
+          } catch (urlErr) {
+            console.warn(
+              `[DELIVERY] Direct URL photo upload failed (${urlErr instanceof Error ? urlErr.message : String(urlErr)}). Retrying with InputFile streaming...`
+            );
+            await ctx.replyWithPhoto(new InputFile(new URL(item.publicUrl)), {
+              caption: post.title ? `📸 ${post.title}${itemLabel}` : undefined,
+            });
+          }
         }
         directCount++;
         continue;

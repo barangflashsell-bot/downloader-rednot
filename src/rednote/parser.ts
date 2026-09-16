@@ -201,6 +201,10 @@ interface RednoteNoteData {
     id?: string;
   };
   video?: {
+    consumer?: {
+      originVideoKey?: string;
+      origin_video_key?: string;
+    };
     media?: {
       stream?: Record<string, RednoteStreamItem[] | undefined>;
     };
@@ -284,18 +288,35 @@ interface RednoteInitialState {
         extractedPostId = noteObj.noteId || noteObj.id;
       }
 
-      // Check video stream
-      let stream = noteObj.video?.media?.stream;
-      if (!stream && noteObj.video?.mediaV2) {
-        try {
-          const parsedV2 = JSON.parse(noteObj.video.mediaV2);
-          if (parsedV2.stream) {
-            stream = parsedV2.stream;
-          }
-        } catch {
-          // ignore mediaV2 parse error
+      // Check for watermark-free origin video first
+      const originVideoKey =
+        noteObj.video?.consumer?.originVideoKey ||
+        noteObj.video?.consumer?.origin_video_key;
+
+      if (originVideoKey && typeof originVideoKey === 'string') {
+        const noWatermarkUrl = `https://sns-video-bd.xhscdn.com/${originVideoKey}`;
+        if (validateMediaUrl(noWatermarkUrl)) {
+          rawMediaList.push({
+            type: 'video',
+            url: noWatermarkUrl,
+            mimeType: 'video/mp4',
+          });
         }
       }
+
+      // Check video stream as fallback if originVideoKey is not available
+      if (rawMediaList.length === 0) {
+        let stream = noteObj.video?.media?.stream;
+        if (!stream && noteObj.video?.mediaV2) {
+          try {
+            const parsedV2 = JSON.parse(noteObj.video.mediaV2);
+            if (parsedV2.stream) {
+              stream = parsedV2.stream;
+            }
+          } catch {
+            // ignore mediaV2 parse error
+          }
+        }
 
       if (stream && typeof stream === 'object') {
         const videoFormats = ['h264', 'h265', 'av1'];
@@ -328,6 +349,7 @@ interface RednoteInitialState {
           if (rawMediaList.length > 0) break;
         }
       }
+    }
 
       // If not a video post or video not found, check imageList
       if (rawMediaList.length === 0 && Array.isArray(noteObj.imageList)) {
