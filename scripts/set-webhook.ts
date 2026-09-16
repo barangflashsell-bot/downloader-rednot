@@ -34,7 +34,7 @@ async function main() {
     const bot = new Bot(botToken.trim());
     const result = await bot.api.setWebhook(webhookUrl.trim(), {
       secret_token: webhookSecret.trim(),
-      drop_pending_updates: false,
+      drop_pending_updates: true,
     });
 
     if (result) {

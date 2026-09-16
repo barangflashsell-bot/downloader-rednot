@@ -69,7 +69,7 @@ export interface BotFactoryOptions {
  * @returns Configured Bot instance
  */
 export function createBot(token?: string, options?: BotFactoryOptions): Bot {
-  const botToken = token ?? process.env.BOT_TOKEN;
+  const botToken = token ?? process.env.BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN;
 
   if (!botToken || botToken.trim() === '') {
     throw new Error('BOT_TOKEN is not configured in environment variables');
