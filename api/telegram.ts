@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { webhookCallback } from 'grammy';
 import crypto from 'crypto';
 import { getBot } from '../src/bot/bot';
 
@@ -19,35 +18,8 @@ function timingSafeCompare(a: string | undefined, b: string | undefined): boolea
 }
 
 /**
- * Vercel Serverless Function adapter for grammY webhookCallback.
- */
-const vercelNodeAdapter = (req: VercelRequest, res: VercelResponse) => ({
-  update: Promise.resolve(
-    typeof req.body === 'string' ? JSON.parse(req.body) : req.body
-  ),
-  header: (req.headers['x-telegram-bot-api-secret-token'] as string) || undefined,
-  end: () => res.end(),
-  respond: (json: string) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.status(200).send(json);
-  },
-  unauthorized: () => {
-    res.status(401).json({ error: 'Unauthorized' });
-  },
-});
-
-let cachedWebhookHandler: ((req: VercelRequest, res: VercelResponse) => unknown) | null = null;
-
-function getWebhookHandler(): (req: VercelRequest, res: VercelResponse) => unknown {
-  if (!cachedWebhookHandler) {
-    const bot = getBot();
-    cachedWebhookHandler = webhookCallback(bot, vercelNodeAdapter);
-  }
-  return cachedWebhookHandler;
-}
-
-/**
  * Main Telegram Webhook Handler for Vercel Serverless Functions.
+ * Uses bot.handleUpdate() directly for maximum compatibility with Vercel.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -71,12 +43,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const handleUpdate = getWebhookHandler();
-    await handleUpdate(req, res);
+    const bot = getBot();
+    const update = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+
+    console.log(`[Webhook] Processing update_id: ${update?.update_id}`);
+
+    await bot.handleUpdate(update);
+
+    console.log(`[Webhook] Successfully processed update_id: ${update?.update_id}`);
+    return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('[Webhook Error] Error processing Telegram update:', error);
+    // Always respond 200 to prevent Telegram from retrying
     if (!res.writableEnded) {
-      res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true });
     }
   }
 }
