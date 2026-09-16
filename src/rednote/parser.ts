@@ -167,8 +167,11 @@ export function parseRednoteHtml(html: string, canonicalUrl: string): RednotePos
 
 interface RednoteStreamItem {
   masterUrl?: string;
+  master_url?: string;
   mainUrl?: string;
+  main_url?: string;
   backupUrls?: string[];
+  backup_urls?: string[];
   width?: number;
   height?: number;
 }
@@ -178,6 +181,7 @@ interface RednoteImageItem {
   urlOriginal?: string;
   infoList?: Array<{ url?: string }>;
   urlPre?: string;
+  url?: string;
   width?: number;
   height?: number;
 }
@@ -190,6 +194,7 @@ interface RednoteNoteData {
   description?: string;
   type?: string;
   user?: {
+    nickName?: string;
     nickname?: string;
     name?: string;
     userId?: string;
@@ -199,6 +204,7 @@ interface RednoteNoteData {
     media?: {
       stream?: Record<string, RednoteStreamItem[] | undefined>;
     };
+    mediaV2?: string;
   };
   imageList?: RednoteImageItem[];
 }
@@ -208,7 +214,11 @@ interface RednoteInitialState {
     firstNoteId?: string;
     noteDetailMap?: Record<string, { note?: RednoteNoteData } | undefined>;
   };
-  noteData?: RednoteNoteData;
+  noteData?: {
+    data?: {
+      noteData?: RednoteNoteData;
+    };
+  } | RednoteNoteData;
 }
 
   let extractedPostId = extractPostIdFromUrl(finalCanonicalUrl);
@@ -218,6 +228,9 @@ interface RednoteInitialState {
   let authorId: string | undefined;
 
   const rawMediaList: RednoteMedia[] = [];
+
+  // Helper to ensure media URL uses HTTPS
+  const ensureHttps = (u: string): string => u.trim().replace(/^http:\/\//i, 'https://');
 
   // 1. Try parsing from window.__INITIAL_STATE__
   const initialState = extractInitialState(html) as RednoteInitialState | null;
@@ -249,33 +262,66 @@ interface RednoteInitialState {
       }
     }
 
+    // Support mobile discovery noteData schema
+    if (!noteObj && initialState.noteData) {
+      const nd = initialState.noteData as Record<string, unknown>;
+      if (nd.data && typeof nd.data === 'object') {
+        const dataObj = nd.data as Record<string, unknown>;
+        if (dataObj.noteData && typeof dataObj.noteData === 'object') {
+          noteObj = dataObj.noteData as RednoteNoteData;
+        }
+      } else if (nd.title || nd.noteId || nd.id) {
+        noteObj = nd as RednoteNoteData;
+      }
+    }
+
     if (noteObj) {
       title = noteObj.title || noteObj.desc?.slice(0, 60);
       description = noteObj.desc || noteObj.description;
-      author = noteObj.user?.nickname || noteObj.user?.name;
+      author = noteObj.user?.nickName || noteObj.user?.nickname || noteObj.user?.name;
       authorId = noteObj.user?.userId || noteObj.user?.id;
       if (noteObj.noteId || noteObj.id) {
         extractedPostId = noteObj.noteId || noteObj.id;
       }
 
       // Check video stream
-      const stream = noteObj.video?.media?.stream;
+      let stream = noteObj.video?.media?.stream;
+      if (!stream && noteObj.video?.mediaV2) {
+        try {
+          const parsedV2 = JSON.parse(noteObj.video.mediaV2);
+          if (parsedV2.stream) {
+            stream = parsedV2.stream;
+          }
+        } catch {
+          // ignore mediaV2 parse error
+        }
+      }
+
       if (stream && typeof stream === 'object') {
         const videoFormats = ['h264', 'h265', 'av1'];
         for (const format of videoFormats) {
           const streamList = stream[format];
           if (Array.isArray(streamList)) {
             for (const item of streamList) {
-              const videoUrl = item.masterUrl || item.mainUrl || item.backupUrls?.[0];
-              if (videoUrl && typeof videoUrl === 'string' && validateMediaUrl(videoUrl)) {
-                rawMediaList.push({
-                  type: 'video',
-                  url: videoUrl,
-                  width: item.width,
-                  height: item.height,
-                  mimeType: 'video/mp4',
-                });
-                break;
+              const rawVideoUrl =
+                item.masterUrl ||
+                item.master_url ||
+                item.mainUrl ||
+                item.main_url ||
+                item.backupUrls?.[0] ||
+                item.backup_urls?.[0];
+              if (rawVideoUrl && typeof rawVideoUrl === 'string') {
+                const secureVideoUrl = ensureHttps(rawVideoUrl);
+                if (validateMediaUrl(secureVideoUrl)) {
+                  rawMediaList.push({
+                    type: 'video',
+                    url: secureVideoUrl,
+                    width: item.width,
+                    height: item.height,
+                    mimeType: 'video/mp4',
+                  });
+                  break;
+                }
               }
             }
           }
@@ -286,20 +332,24 @@ interface RednoteInitialState {
       // If not a video post or video not found, check imageList
       if (rawMediaList.length === 0 && Array.isArray(noteObj.imageList)) {
         for (const img of noteObj.imageList) {
-          const imgUrl =
+          const rawImgUrl =
             img.urlDefault ||
             img.urlOriginal ||
             img.infoList?.[0]?.url ||
-            img.urlPre;
+            img.urlPre ||
+            img.url;
 
-          if (imgUrl && typeof imgUrl === 'string' && validateMediaUrl(imgUrl)) {
-            rawMediaList.push({
-              type: 'image',
-              url: imgUrl,
-              width: img.width,
-              height: img.height,
-              mimeType: 'image/jpeg',
-            });
+          if (rawImgUrl && typeof rawImgUrl === 'string') {
+            const secureImgUrl = ensureHttps(rawImgUrl);
+            if (validateMediaUrl(secureImgUrl)) {
+              rawMediaList.push({
+                type: 'image',
+                url: secureImgUrl,
+                width: img.width,
+                height: img.height,
+                mimeType: 'image/jpeg',
+              });
+            }
           }
         }
       }
@@ -330,29 +380,35 @@ interface RednoteInitialState {
 
   // If no media found yet, check Open Graph tags
   if (rawMediaList.length === 0) {
-    const ogVideo =
+    const rawOgVideo =
       $('meta[property="og:video"]').attr('content') ||
       $('meta[property="og:video:url"]').attr('content');
 
-    if (ogVideo && validateMediaUrl(ogVideo)) {
-      rawMediaList.push({
-        type: 'video',
-        url: ogVideo,
-        mimeType: 'video/mp4',
-      });
+    if (rawOgVideo) {
+      const secureOgVideo = ensureHttps(rawOgVideo);
+      if (validateMediaUrl(secureOgVideo)) {
+        rawMediaList.push({
+          type: 'video',
+          url: secureOgVideo,
+          mimeType: 'video/mp4',
+        });
+      }
     }
   }
 
   if (rawMediaList.length === 0) {
     // Check multiple og:image tags
     $('meta[property="og:image"]').each((_, el) => {
-      const imgUrl = $(el).attr('content');
-      if (imgUrl && validateMediaUrl(imgUrl)) {
-        rawMediaList.push({
-          type: 'image',
-          url: imgUrl,
-          mimeType: 'image/jpeg',
-        });
+      const rawImgUrl = $(el).attr('content');
+      if (rawImgUrl) {
+        const secureImgUrl = ensureHttps(rawImgUrl);
+        if (validateMediaUrl(secureImgUrl)) {
+          rawMediaList.push({
+            type: 'image',
+            url: secureImgUrl,
+            mimeType: 'image/jpeg',
+          });
+        }
       }
     });
   }

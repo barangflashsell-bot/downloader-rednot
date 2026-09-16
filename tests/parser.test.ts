@@ -127,4 +127,59 @@ describe('RedNote HTML Parser', () => {
     expect(extractPostIdFromUrl('https://www.xiaohongshu.com/other')).toBeUndefined();
     expect(extractPostIdFromUrl('not-a-valid-url')).toBeUndefined();
   });
+
+  it('should parse mobile discovery noteData schema and upgrade http stream to https', () => {
+    const mobileHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head><title>Mobile Discovery</title></head>
+        <body>
+          <script>
+            window.__INITIAL_STATE__ = {
+              noteData: {
+                data: {
+                  noteData: {
+                    noteId: "6aa920350000000026033761",
+                    title: "Test Mobile Title",
+                    desc: "Test Description",
+                    user: {
+                      nickName: "七小七",
+                      userId: "67ee6c93"
+                    },
+                    video: {
+                      media: {
+                        stream: {
+                          h264: [
+                            {
+                              masterUrl: "http://sns-video-zl.xhscdn.com/stream/test.mp4",
+                              width: 720,
+                              height: 1280
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    const result = parseRednoteHtml(mobileHtml, 'https://www.xiaohongshu.com/discovery/item/6aa920350000000026033761');
+    expect(result.id).toBe('6aa920350000000026033761');
+    expect(result.title).toBe('Test Mobile Title');
+    expect(result.author).toBe('七小七');
+    expect(result.authorId).toBe('67ee6c93');
+    expect(result.media.length).toBe(1);
+    expect(result.media[0]).toEqual({
+      type: 'video',
+      url: 'https://sns-video-zl.xhscdn.com/stream/test.mp4',
+      width: 720,
+      height: 1280,
+      mimeType: 'video/mp4',
+    });
+  });
 });

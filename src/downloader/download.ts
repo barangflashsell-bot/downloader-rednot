@@ -308,9 +308,21 @@ export async function downloadAndStoreMedia(
         });
       } catch (err: unknown) {
         fileReadStream.destroy();
-        throw new RednoteStorageError(
-          `Storage upload failed: ${err instanceof Error ? err.message : String(err)}`
-        );
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes('BLOB_READ_WRITE_TOKEN')) {
+          console.warn(
+            '[DOWNLOADER] BLOB_READ_WRITE_TOKEN is not configured. Falling back to direct CDN URL for delivery.'
+          );
+          uploadResult = {
+            storageKey,
+            publicUrl: currentUrl,
+            contentType: normalizedContentType,
+          };
+        } else {
+          throw new RednoteStorageError(
+            `Storage upload failed: ${errMsg}`
+          );
+        }
       } finally {
         fileReadStream.destroy();
       }

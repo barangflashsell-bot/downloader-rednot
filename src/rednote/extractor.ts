@@ -5,7 +5,7 @@ import {
   RednoteAccessError,
   RednoteNetworkError,
 } from './errors';
-import { resolveRednoteUrl } from './resolver';
+import { resolveRednoteUrlDetailed, MOBILE_USER_AGENT } from './resolver';
 import { parseRednoteHtml } from './parser';
 
 export interface ExtractorOptions {
@@ -14,8 +14,7 @@ export interface ExtractorOptions {
   maxHtmlSizeBytes?: number;
 }
 
-const DEFAULT_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+const DEFAULT_USER_AGENT = MOBILE_USER_AGENT;
 
 const MAX_HTML_SIZE = 5 * 1024 * 1024; // 5 MB limit for HTML response
 
@@ -42,12 +41,13 @@ export async function extractRednote(
   const fetchImpl = options?.fetchFn ?? fetch;
   const maxSizeBytes = options?.maxHtmlSizeBytes ?? MAX_HTML_SIZE;
 
-  // 2. Resolve short URL if needed
+  // 2. Resolve short URL if needed (and collect redirect cookies)
   console.log(`[REDNOTE] Resolving URL: ${trimmedUrl}`);
-  const resolvedUrl = await resolveRednoteUrl(trimmedUrl, {
+  const resolved = await resolveRednoteUrlDetailed(trimmedUrl, {
     timeoutMs,
     fetchFn: fetchImpl,
   });
+  const resolvedUrl = resolved.url;
 
   // 3. Fetch public page HTML
   console.log(`[REDNOTE] Fetching public page: ${resolvedUrl}`);
@@ -57,17 +57,23 @@ export async function extractRednote(
   let html: string;
 
   try {
+    const headers: Record<string, string> = {
+      'User-Agent': DEFAULT_USER_AGENT,
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh-Hans;q=0.9,en;q=0.8',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+    };
+
+    if (resolved.cookies.length > 0) {
+      headers['Cookie'] = resolved.cookies.map((c) => c.split(';')[0]).join('; ');
+    }
+
     const response = await fetchImpl(resolvedUrl, {
       method: 'GET',
-      headers: {
-        'User-Agent': DEFAULT_USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-      },
+      headers,
       signal: controller.signal,
     });
 

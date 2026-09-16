@@ -61,5 +61,14 @@ describe('extractRednoteUrl', () => {
     expect(extractRednoteUrl('Hello world no links')).toBeNull();
     expect(extractRednoteUrl('Check https://youtube.com/watch?v=123')).toBeNull();
   });
+
+  it('should extract and upgrade http://xhslink.com/o/... links', () => {
+    expect(extractRednoteUrl('http://xhslink.com/o/Awfz0NZ6meK')).toBe(
+      'https://xhslink.com/o/Awfz0NZ6meK'
+    );
+    expect(
+      extractRednoteUrl('Lihat video ini http://xhslink.com/o/Awfz0NZ6meK keren')
+    ).toBe('https://xhslink.com/o/Awfz0NZ6meK');
+  });
 });
 
